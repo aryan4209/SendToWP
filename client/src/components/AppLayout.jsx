@@ -10,6 +10,7 @@ import ScheduleSendOutlinedIcon from "@mui/icons-material/ScheduleSendOutlined";
 import ListAltOutlinedIcon from "@mui/icons-material/ListAltOutlined";
 import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
 import WhatsAppIcon from "@mui/icons-material/WhatsApp";
+import SmartToyOutlinedIcon from "@mui/icons-material/SmartToyOutlined";
 
 const drawerWidth = 248;
 const items = [
@@ -17,6 +18,7 @@ const items = [
   { label: "Schedule Message", path: "/schedule", icon: <ScheduleSendOutlinedIcon /> },
   { label: "Scheduled Messages", path: "/messages", icon: <ListAltOutlinedIcon /> },
   { label: "Settings", path: "/settings", icon: <SettingsOutlinedIcon /> },
+  { label: "AI Auto Reply", path: "/ai-auto-reply", icon: <SmartToyOutlinedIcon /> },
 ];
 
 export default function AppLayout() {

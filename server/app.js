@@ -8,6 +8,7 @@ const fs = require("fs");
 const path = require("path");
 const messageRoutes = require("./routes/messageRoutes");
 const whatsappRoutes = require("./routes/whatsappRoutes");
+const aiRoutes = require("./routes/aiRoutes");
 const requestLogger = require("./middleware/requestLogger");
 const { notFound, errorHandler } = require("./middleware/errorHandler");
 const whatsappService = require("./services/whatsappService");
@@ -33,6 +34,7 @@ app.get("/api/health", (req, res) =>
 );
 app.use("/api/messages", messageRoutes);
 app.use("/api/whatsapp", whatsappRoutes);
+app.use("/api/ai", aiRoutes);
 app.use("/api", notFound);
 
 const clientDist = path.join(__dirname, "..", "client", "dist");

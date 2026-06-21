@@ -4,6 +4,7 @@ import Dashboard from "./pages/Dashboard";
 import ScheduleMessage from "./pages/ScheduleMessage";
 import ScheduledMessages from "./pages/ScheduledMessages";
 import Settings from "./pages/Settings";
+import AiAutoReplySettings from "./pages/AiAutoReplySettings";
 
 export default function App() {
   return (
@@ -13,6 +14,7 @@ export default function App() {
         <Route path="/schedule" element={<ScheduleMessage />} />
         <Route path="/messages" element={<ScheduledMessages />} />
         <Route path="/settings" element={<Settings />} />
+        <Route path="/ai-auto-reply" element={<AiAutoReplySettings />} />
       </Route>
     </Routes>
   );
