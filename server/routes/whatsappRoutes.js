@@ -1,8 +1,13 @@
 const express = require("express");
 const whatsappService = require("../services/whatsappService");
+const requireAuth = require("../middleware/requireAuth");
 const { success, error } = require("../utils/apiResponse");
 
 const router = express.Router();
+
+// The pairing QR grants full control of the linked WhatsApp account, so none of
+// these endpoints may be reachable without signing in.
+router.use(requireAuth);
 
 router.get("/status", (req, res) =>
   success(res, "WhatsApp status retrieved", whatsappService.getStatus())

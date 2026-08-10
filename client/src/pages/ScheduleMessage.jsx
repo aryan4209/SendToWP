@@ -10,6 +10,11 @@ import PageHeader from "../components/PageHeader";
 
 const initialForm = { phone: "", message: "", scheduleTime: "", repeatType: "None" };
 
+// datetime-local works in local time, so the min attribute must be local too -
+// toISOString() would shift it by the timezone offset.
+const toLocalInputValue = (date) =>
+  new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+
 export default function ScheduleMessage() {
   const [form, setForm] = useState(initialForm);
   const [busy, setBusy] = useState(false);
@@ -53,7 +58,7 @@ export default function ScheduleMessage() {
           <Stack spacing={2.5}>
             <TextField name="phone" label="Phone Number" value={form.phone} onChange={update} required helperText="10-digit Indian numbers are automatically prefixed with 91." />
             <TextField name="message" label="Message" value={form.message} onChange={update} required multiline minRows={5} inputProps={{ maxLength: 1000 }} helperText={`${form.message.length}/1000`} />
-            <TextField name="scheduleTime" label="Schedule Date & Time" type="datetime-local" value={form.scheduleTime} onChange={update} required InputLabelProps={{ shrink: true }} inputProps={{ min: new Date(Date.now() + 60000).toISOString().slice(0, 16) }} />
+            <TextField name="scheduleTime" label="Schedule Date & Time" type="datetime-local" value={form.scheduleTime} onChange={update} InputLabelProps={{ shrink: true }} inputProps={{ min: toLocalInputValue(new Date(Date.now() + 60000)) }} helperText="Required to schedule. Leave empty to send now." />
             <FormControl>
               <InputLabel>Repeat Type</InputLabel>
               <Select name="repeatType" value={form.repeatType} label="Repeat Type" onChange={update}>

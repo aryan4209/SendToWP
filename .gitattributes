@@ -1,0 +1,6 @@
+# Shell scripts must keep LF endings or they break on Linux with
+# "bad interpreter: /usr/bin/env bash^M".
+*.sh text eol=lf
+Dockerfile text eol=lf
+*.yml text eol=lf
+*.json text eol=lf

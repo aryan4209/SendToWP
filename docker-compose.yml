@@ -1,0 +1,23 @@
+services:
+  sendtowp:
+    build: .
+    image: sendtowp:latest
+    container_name: sendtowp
+    restart: unless-stopped
+    # Bound to localhost only: Cloudflare Tunnel (or a reverse proxy) provides
+    # HTTPS and public access. Change to "3000:3000" to expose it directly.
+    ports:
+      - "127.0.0.1:3000:3000"
+    env_file:
+      - .env
+    volumes:
+      # SQLite database + WhatsApp session. Never delete this.
+      - sendtowp-data:/data
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  sendtowp-data:

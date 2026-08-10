@@ -1,6 +1,7 @@
 {
   "watch": [
     "app.js",
+    "config",
     "routes",
     "services",
     "scheduler",

@@ -33,11 +33,19 @@ export default function Settings() {
 
   useEffect(() => {
     load(true);
-    const timer = setInterval(() => load(true), 5000);
+    // Poll quickly while pairing (the QR rotates), then back off once connected.
+    const intervalMs = status === "Connected" ? 30000 : 5000;
+    const timer = setInterval(() => {
+      if (!document.hidden) load(true);
+    }, intervalMs);
     return () => clearInterval(timer);
-  }, [load]);
+  }, [load, status]);
 
   const reconnect = async () => {
+    // Reconnecting while unpaired clears the saved session, so make that explicit.
+    if (status !== "Connected" && !window.confirm("This clears the saved WhatsApp session and shows a new QR code. Continue?")) {
+      return;
+    }
     setBusy(true);
     try {
       await api.post("/whatsapp/reconnect");
