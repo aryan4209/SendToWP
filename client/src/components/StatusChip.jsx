@@ -2,6 +2,8 @@ import { Chip } from "@mui/material";
 
 const colors = {
   Connected: "success",
+  // Linked, but the socket is only opened while sending (serverless hosts).
+  Ready: "success",
   Sent: "success",
   Pending: "warning",
   "QR Available": "info",

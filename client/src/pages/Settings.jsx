@@ -10,6 +10,10 @@ import StatusChip from "../components/StatusChip";
 export default function Settings() {
   const [status, setStatus] = useState("Connecting");
   const [lastError, setLastError] = useState(null);
+  const [paired, setPaired] = useState(false);
+  // True where the server cannot keep a socket open between requests, so it
+  // dials WhatsApp only while actually sending.
+  const [onDemand, setOnDemand] = useState(false);
   const [qr, setQr] = useState(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState({ open: false, severity: "success", message: "" });
@@ -20,6 +24,8 @@ export default function Settings() {
       const response = await api.get("/whatsapp/status");
       setStatus(response.data.data.status);
       setLastError(response.data.data.lastError);
+      setPaired(Boolean(response.data.data.paired));
+      setOnDemand(response.data.data.canPairInBrowser === false);
       if (response.data.data.hasQr) {
         const qrResponse = await api.get("/whatsapp/qr");
         setQr(qrResponse.data.data.qr);
@@ -81,19 +87,47 @@ export default function Settings() {
           <Stack spacing={3} alignItems="flex-start">
             <Box>
               <Typography variant="h6" sx={{ mb: 1.5 }}>WhatsApp Status</Typography>
-              <StatusChip status={status} />
+              <StatusChip status={onDemand && paired ? "Ready" : status} />
             </Box>
-            {lastError && <Alert severity="warning">Last connection error: {lastError}</Alert>}
+
+            {/* Where the process cannot stay alive, a closed socket is normal
+                rather than a fault, so say so instead of showing an error. */}
+            {onDemand && paired && (
+              <Alert severity="success" sx={{ width: "100%" }}>
+                <strong>Your WhatsApp account is linked.</strong> This deployment connects only
+                while a message is being sent, so it will not show a permanent live connection.
+                That is expected here and sending works normally.
+              </Alert>
+            )}
+
+            {!paired && (
+              <Alert severity="warning" sx={{ width: "100%" }}>
+                <strong>Not linked yet.</strong>{" "}
+                {onDemand
+                  ? "This deployment cannot hold a QR code open long enough to scan. Pair it by running scripts/pair-whatsapp.js against the same database, then reload this page."
+                  : "Scan the QR code below with WhatsApp to link your account."}
+              </Alert>
+            )}
+
+            {/* A stale error from a socket that was closed on purpose is noise. */}
+            {lastError && !(onDemand && paired) && (
+              <Alert severity="warning" sx={{ width: "100%" }}>Last connection error: {lastError}</Alert>
+            )}
+
             {status === "Connecting" && <CircularProgress size={28} />}
+
             {qr && <Box>
               <Typography color="text.secondary" sx={{ mb: 2 }}>Scan this QR code with WhatsApp to connect.</Typography>
               <Box component="img" src={qr} alt="WhatsApp pairing QR code" sx={{ width: "min(100%, 320px)", display: "block", border: "1px solid #e2e7e5" }} />
             </Box>}
+
             <Stack direction="row" spacing={1.5} flexWrap="wrap" useFlexGap>
               <Button variant="outlined" startIcon={<RefreshIcon />} onClick={() => load(false)}>Refresh Status</Button>
-              <Button variant="contained" startIcon={<RestartAltIcon />} disabled={busy} onClick={reconnect}>
-                Reconnect
-              </Button>
+              {!onDemand && (
+                <Button variant="contained" startIcon={<RestartAltIcon />} disabled={busy} onClick={reconnect}>
+                  Reconnect
+                </Button>
+              )}
               <Button variant="outlined" color="error" startIcon={<LinkOffIcon />} disabled={busy} onClick={resetPairing}>
                 Unlink &amp; Pair Again
               </Button>

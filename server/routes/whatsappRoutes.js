@@ -1,5 +1,7 @@
 const express = require("express");
 const whatsappService = require("../services/whatsappService");
+const authStore = require("../services/authStore");
+const runtime = require("../config/runtime");
 const requireAuth = require("../middleware/requireAuth");
 const { success, error } = require("../utils/apiResponse");
 
@@ -9,9 +11,26 @@ const router = express.Router();
 // these endpoints may be reachable without signing in.
 router.use(requireAuth);
 
-router.get("/status", (req, res) =>
-  success(res, "WhatsApp status retrieved", whatsappService.getStatus())
-);
+/**
+ * `status` describes the live socket, which on a serverless host is almost
+ * always "Disconnected" because each invocation starts cold. `paired` is the
+ * useful signal there: it says a session exists and sending will work, so the
+ * UI can avoid reporting a healthy deployment as broken.
+ */
+router.get("/status", async (req, res, next) => {
+  try {
+    const paired = await authStore.hasAuthState();
+    return success(res, "WhatsApp status retrieved", {
+      ...whatsappService.getStatus(),
+      paired,
+      // Where a socket cannot be held open, the browser cannot complete a QR
+      // scan either - pairing has to be done with scripts/pair-whatsapp.js.
+      canPairInBrowser: runtime.isPersistent,
+    });
+  } catch (err) {
+    return next(err);
+  }
+});
 
 router.get("/qr", (req, res) => {
   const qr = whatsappService.getQr();
