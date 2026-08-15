@@ -53,6 +53,20 @@ const survives = async (label) => {
 
 const main = async () => {
   await initialize();
+
+  // This test empties ScheduledMessages. Against a real deployment that throws
+  // away every message the user has queued, so refuse unless it is clearly a
+  // scratch database.
+  const existing = await all(`SELECT "Id" FROM "ScheduledMessages"`);
+  if (existing.length && process.env.ALLOW_DESTRUCTIVE_TEST !== "1") {
+    console.error(`\nREFUSING TO RUN: this database holds ${existing.length} scheduled message(s).`);
+    console.error("Running would delete all of them.");
+    console.error("Point DATABASE_URL at a scratch database, or set");
+    console.error("ALLOW_DESTRUCTIVE_TEST=1 if you really mean to wipe it.\n");
+    await close();
+    process.exit(1);
+  }
+
   await run(`DELETE FROM "ScheduledMessages"`);
   await run(`DELETE FROM "SystemState"`);
   await run(`DELETE FROM "Users" WHERE "Email" = ?`, ["retention@test.local"]);

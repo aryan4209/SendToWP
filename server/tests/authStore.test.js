@@ -45,7 +45,20 @@ const sameBytes = (a, b) =>
 const main = async () => {
   await initialize();
 
-  // A shared Postgres may carry rows from an earlier run.
+  // This test wipes the session table. Against a real deployment's database
+  // that unlinks WhatsApp and forces a re-pair, so refuse to run when a live
+  // session is present unless the caller insists.
+  const live = await get(`SELECT "Key" FROM "WhatsAppAuth" WHERE "Key" = 'creds'`);
+  if (live && process.env.ALLOW_DESTRUCTIVE_TEST !== "1") {
+    console.error("\nREFUSING TO RUN: this database holds a paired WhatsApp session.");
+    console.error("Running would delete it and force you to scan a new QR code.");
+    console.error("Point DATABASE_URL at a scratch database, or set");
+    console.error("ALLOW_DESTRUCTIVE_TEST=1 if you really mean to wipe it.\n");
+    await close();
+    process.exit(1);
+  }
+
+  // A shared scratch database may carry rows from an earlier run.
   await authStore.clearAuthState();
 
   console.log("\n== fresh state ==");

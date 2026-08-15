@@ -103,7 +103,7 @@ const isConnected = () => status === "Connected" && Boolean(socket);
  * immediately. On a serverless host every invocation starts cold, so this
  * restores the session from the database and waits for the handshake.
  */
-const ensureConnected = async (timeoutMs = Number(process.env.WA_CONNECT_TIMEOUT_MS || 30000)) => {
+const ensureConnected = async (timeoutMs = Number(process.env.WA_CONNECT_TIMEOUT_MS || 90000)) => {
   if (isConnected()) return;
 
   if (!(await authStore.hasAuthState())) {

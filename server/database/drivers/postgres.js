@@ -45,9 +45,11 @@ const createPostgresDriver = () => {
   const pool = new pg.Pool({
     connectionString,
     ssl: needsSsl ? { rejectUnauthorized: false } : false,
-    // Serverless invocations are short lived and concurrent; a small pool that
-    // releases idle clients quickly avoids exhausting the database's slots.
-    max: Number(process.env.PGPOOL_MAX || (process.env.VERCEL ? 1 : 10)),
+    // Serverless invocations are short lived, but a pool of one serialises
+    // every concurrent query behind a single connection - which turned the
+    // WhatsApp handshake into a timeout. A few connections keep restore fast
+    // without exhausting the database's slots.
+    max: Number(process.env.PGPOOL_MAX || (process.env.VERCEL ? 5 : 10)),
     idleTimeoutMillis: 10_000,
     connectionTimeoutMillis: 10_000,
   });
