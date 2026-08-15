@@ -19,10 +19,17 @@ router.get("/qr", (req, res) => {
   return success(res, "QR code retrieved", { qr });
 });
 
+// `reset: true` throws away the stored session and starts a fresh pairing.
+// Anything else simply reopens the socket using the session already saved.
 router.post("/reconnect", async (req, res, next) => {
   try {
-    await whatsappService.reconnect();
-    return success(res, "WhatsApp reconnect started", whatsappService.getStatus());
+    const reset = req.body?.reset === true;
+    await whatsappService.reconnect({ reset });
+    return success(
+      res,
+      reset ? "WhatsApp session cleared, scan the new QR code" : "WhatsApp reconnect started",
+      whatsappService.getStatus()
+    );
   } catch (err) {
     return next(err);
   }

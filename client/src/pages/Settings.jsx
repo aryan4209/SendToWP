@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Alert, Box, Button, Card, CardContent, CircularProgress, Snackbar, Stack, Typography } from "@mui/material";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import RestartAltIcon from "@mui/icons-material/RestartAlt";
+import LinkOffIcon from "@mui/icons-material/LinkOff";
 import api, { errorMessage } from "../api";
 import PageHeader from "../components/PageHeader";
 import StatusChip from "../components/StatusChip";
@@ -41,16 +42,30 @@ export default function Settings() {
     return () => clearInterval(timer);
   }, [load, status]);
 
+  // Reopens the socket using the session already stored. Safe to run any time.
   const reconnect = async () => {
-    // Reconnecting while unpaired clears the saved session, so make that explicit.
-    if (status !== "Connected" && !window.confirm("This clears the saved WhatsApp session and shows a new QR code. Continue?")) {
+    setBusy(true);
+    try {
+      await api.post("/whatsapp/reconnect", { reset: false });
+      notify("success", "Reconnecting to WhatsApp");
+      setTimeout(() => load(true), 1500);
+    } catch (error) {
+      notify("error", errorMessage(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Destructive: throws the linked session away and starts pairing from zero.
+  const resetPairing = async () => {
+    if (!window.confirm("This deletes the saved WhatsApp session and you will have to scan a new QR code. Continue?")) {
       return;
     }
     setBusy(true);
     try {
-      await api.post("/whatsapp/reconnect");
-      notify("success", "WhatsApp reconnect started");
-      setTimeout(() => load(true), 1000);
+      await api.post("/whatsapp/reconnect", { reset: true });
+      notify("success", "Session cleared. Scan the new QR code below.");
+      setTimeout(() => load(true), 1500);
     } catch (error) {
       notify("error", errorMessage(error));
     } finally {
@@ -77,7 +92,10 @@ export default function Settings() {
             <Stack direction="row" spacing={1.5} flexWrap="wrap" useFlexGap>
               <Button variant="outlined" startIcon={<RefreshIcon />} onClick={() => load(false)}>Refresh Status</Button>
               <Button variant="contained" startIcon={<RestartAltIcon />} disabled={busy} onClick={reconnect}>
-                {status === "Connected" ? "Reconnect WhatsApp" : "Reset & Pair WhatsApp"}
+                Reconnect
+              </Button>
+              <Button variant="outlined" color="error" startIcon={<LinkOffIcon />} disabled={busy} onClick={resetPairing}>
+                Unlink &amp; Pair Again
               </Button>
             </Stack>
           </Stack>

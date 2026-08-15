@@ -137,19 +137,30 @@ const ensureConnected = async (timeoutMs = Number(process.env.WA_CONNECT_TIMEOUT
   });
 };
 
-const reconnect = async () => {
+/**
+ * Reopens the socket.
+ *
+ * @param {object} [options]
+ * @param {boolean} [options.reset] discard the stored session and pair again
+ *
+ * The stored session is only discarded when `reset` is explicitly requested.
+ * Inferring it from a disconnected status would be catastrophic on a serverless
+ * host, where every instance starts disconnected - an ordinary reconnect would
+ * wipe a perfectly good session and force re-pairing.
+ */
+const reconnect = async ({ reset = false } = {}) => {
   manualReconnect = true;
-  const resetPairing = status !== "Connected";
   if (socket) {
     try {
       socket.end(new Error("Manual reconnect"));
     } catch (error) {
       console.warn("Unable to close existing WhatsApp socket:", error.message);
     }
+    socket = null;
   }
-  if (resetPairing) {
+  if (reset) {
     await authStore.clearAuthState();
-    console.log("Cleared incomplete WhatsApp session for fresh QR pairing");
+    console.log("Cleared WhatsApp session for fresh QR pairing");
   }
   setStatus("Disconnected");
   await connect();
