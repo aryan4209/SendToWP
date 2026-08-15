@@ -6,6 +6,9 @@
     "client",
     "server"
   ],
+  "engines": {
+    "node": "20.x"
+  },
   "scripts": {
     "dev": "concurrently -n server,client -c green,cyan \"npm run dev -w server\" \"npm run dev -w client\"",
     "build": "npm run build -w client",
