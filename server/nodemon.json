@@ -1,5 +1,6 @@
 {
   "watch": [
+    "index.js",
     "app.js",
     "config",
     "routes",
@@ -7,7 +8,7 @@
     "scheduler",
     "middleware",
     "utils",
-    "database/db.js"
+    "database"
   ],
   "ignore": [
     "whatsapp-auth/**",

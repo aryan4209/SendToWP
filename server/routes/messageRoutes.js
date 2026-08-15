@@ -1,6 +1,6 @@
 const express = require("express");
 const { body, param, query, validationResult } = require("express-validator");
-const { run, get, all } = require("../database/db");
+const { run, get, all, insert } = require("../database");
 const whatsappService = require("../services/whatsappService");
 const requireAuth = require("../middleware/requireAuth");
 const { created, success, error } = require("../utils/apiResponse");
@@ -63,9 +63,9 @@ router.post(
   async (req, res, next) => {
     try {
       const now = new Date().toISOString();
-      const result = await run(
-        `INSERT INTO ScheduledMessages
-         (UserId, Phone, Message, ScheduleTime, RepeatType, Status, RetryCount, CreatedOn, UpdatedOn)
+      const result = await insert(
+        `INSERT INTO "ScheduledMessages"
+         ("UserId", "Phone", "Message", "ScheduleTime", "RepeatType", "Status", "RetryCount", "CreatedOn", "UpdatedOn")
          VALUES (?, ?, ?, ?, ?, 'Pending', 0, ?, ?)`,
         [
           req.user.Id,
@@ -77,7 +77,7 @@ router.post(
           now,
         ]
       );
-      const message = await get("SELECT * FROM ScheduledMessages WHERE Id = ?", [result.id]);
+      const message = await get(`SELECT * FROM "ScheduledMessages" WHERE "Id" = ?`, [result.id]);
       return created(res, "Message scheduled successfully", message);
     } catch (err) {
       return next(err);
@@ -94,18 +94,18 @@ router.get(
   ],
   async (req, res, next) => {
     try {
-      const where = ["UserId = ?"];
+      const where = [`"UserId" = ?`];
       const params = [req.user.Id];
       if (req.query.status) {
-        where.push("Status = ?");
+        where.push(`"Status" = ?`);
         params.push(req.query.status);
       }
       if (req.query.search) {
-        where.push("(Phone LIKE ? OR Message LIKE ?)");
+        where.push(`("Phone" LIKE ? OR "Message" LIKE ?)`);
         params.push(`%${req.query.search}%`, `%${req.query.search}%`);
       }
       const messages = await all(
-        `SELECT * FROM ScheduledMessages WHERE ${where.join(" AND ")} ORDER BY ScheduleTime DESC`,
+        `SELECT * FROM "ScheduledMessages" WHERE ${where.join(" AND ")} ORDER BY "ScheduleTime" DESC`,
         params
       );
       return success(res, "Scheduled messages retrieved", messages);
@@ -118,15 +118,17 @@ router.get(
 router.get("/stats", async (req, res, next) => {
   try {
     const rows = await all(
-      "SELECT Status, COUNT(*) AS Count FROM ScheduledMessages WHERE UserId = ? GROUP BY Status",
+      `SELECT "Status", COUNT(*) AS "Count" FROM "ScheduledMessages"
+       WHERE "UserId" = ? GROUP BY "Status"`,
       [req.user.Id]
     );
     const stats = { total: 0, pending: 0, sent: 0, failed: 0 };
     rows.forEach((row) => {
-      stats.total += row.Count;
-      if (row.Status === "Pending" || row.Status === "Processing") stats.pending += row.Count;
-      if (row.Status === "Sent") stats.sent = row.Count;
-      if (row.Status === "Failed") stats.failed = row.Count;
+      const count = Number(row.Count);
+      stats.total += count;
+      if (row.Status === "Pending" || row.Status === "Processing") stats.pending += count;
+      if (row.Status === "Sent") stats.sent = count;
+      if (row.Status === "Failed") stats.failed = count;
     });
     return success(res, "Message statistics retrieved", stats);
   } catch (err) {
@@ -146,18 +148,18 @@ router.put(
   ],
   async (req, res, next) => {
     try {
-      const existing = await get("SELECT * FROM ScheduledMessages WHERE Id = ? AND UserId = ?", [
-        req.params.id,
-        req.user.Id,
-      ]);
+      const existing = await get(
+        `SELECT * FROM "ScheduledMessages" WHERE "Id" = ? AND "UserId" = ?`,
+        [req.params.id, req.user.Id]
+      );
       if (!existing) return error(res, 404, "Scheduled message not found");
       if (existing.Status === "Processing") return error(res, 409, "A processing message cannot be edited");
 
       await run(
-        `UPDATE ScheduledMessages
-         SET Phone = ?, Message = ?, ScheduleTime = ?, RepeatType = ?,
-             Status = 'Pending', RetryCount = 0, ErrorMessage = NULL, UpdatedOn = ?
-         WHERE Id = ? AND UserId = ? AND Status != 'Processing'`,
+        `UPDATE "ScheduledMessages"
+         SET "Phone" = ?, "Message" = ?, "ScheduleTime" = ?, "RepeatType" = ?,
+             "Status" = 'Pending', "RetryCount" = 0, "ErrorMessage" = NULL, "UpdatedOn" = ?
+         WHERE "Id" = ? AND "UserId" = ? AND "Status" != 'Processing'`,
         [
           req.body.phone,
           req.body.message,
@@ -168,7 +170,7 @@ router.put(
           req.user.Id,
         ]
       );
-      const updated = await get("SELECT * FROM ScheduledMessages WHERE Id = ?", [req.params.id]);
+      const updated = await get(`SELECT * FROM "ScheduledMessages" WHERE "Id" = ?`, [req.params.id]);
       return success(res, "Scheduled message updated", updated);
     } catch (err) {
       return next(err);
@@ -182,7 +184,7 @@ router.delete(
   async (req, res, next) => {
     try {
       const result = await run(
-        "DELETE FROM ScheduledMessages WHERE Id = ? AND UserId = ? AND Status != 'Processing'",
+        `DELETE FROM "ScheduledMessages" WHERE "Id" = ? AND "UserId" = ? AND "Status" != 'Processing'`,
         [req.params.id, req.user.Id]
       );
       if (!result.changes) return error(res, 404, "Message not found or currently processing");

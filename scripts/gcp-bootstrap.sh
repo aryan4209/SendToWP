@@ -139,7 +139,7 @@ User=${SERVICE_USER}
 Group=${SERVICE_USER}
 WorkingDirectory=${APP_DIR}/server
 EnvironmentFile=${ENV_FILE}
-ExecStart=/usr/bin/node ${APP_DIR}/server/app.js
+ExecStart=/usr/bin/node ${APP_DIR}/server/index.js
 Restart=always
 RestartSec=5
 

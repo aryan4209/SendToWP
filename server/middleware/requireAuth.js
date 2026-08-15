@@ -1,5 +1,5 @@
 const jwt = require("jsonwebtoken");
-const { get } = require("../database/db");
+const { get } = require("../database");
 const { jwtSecret } = require("../config/auth");
 const { error } = require("../utils/apiResponse");
 
@@ -18,7 +18,10 @@ const requireAuth = async (req, res, next) => {
 
   try {
     const payload = jwt.verify(token, jwtSecret);
-    const user = await get("SELECT Id, Name, Email, CreatedOn FROM Users WHERE Id = ?", [payload.sub]);
+    const user = await get(
+      `SELECT "Id", "Name", "Email", "CreatedOn" FROM "Users" WHERE "Id" = ?`,
+      [payload.sub]
+    );
     if (!user) return error(res, 401, "Account no longer exists");
 
     req.user = user;

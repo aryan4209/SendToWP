@@ -3,7 +3,7 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const rateLimit = require("express-rate-limit");
 const { body, validationResult } = require("express-validator");
-const { run, get } = require("../database/db");
+const { run, get, insert } = require("../database");
 const { jwtSecret, jwtExpiresIn, bcryptRounds, allowRegistration } = require("../config/auth");
 const requireAuth = require("../middleware/requireAuth");
 const { created, success, error } = require("../utils/apiResponse");
@@ -66,32 +66,39 @@ router.post(
     try {
       const { name, email, password } = req.body;
 
-      const userCount = await get("SELECT COUNT(*) AS count FROM Users");
-      const isFirstAccount = userCount.count === 0;
+      const userCount = await get(`SELECT COUNT(*) AS "Count" FROM "Users"`);
+      const isFirstAccount = Number(userCount.Count) === 0;
       if (!allowRegistration && !isFirstAccount) {
         return error(res, 403, "Registration is disabled on this server");
       }
 
-      const existing = await get("SELECT Id FROM Users WHERE Email = ?", [email]);
+      const existing = await get(`SELECT "Id" FROM "Users" WHERE "Email" = ?`, [email]);
       if (existing) return error(res, 409, "An account with this email already exists");
 
       const now = new Date().toISOString();
       const passwordHash = await bcrypt.hash(password, bcryptRounds);
-      const result = await run(
-        "INSERT INTO Users (Name, Email, PasswordHash, CreatedOn, UpdatedOn) VALUES (?, ?, ?, ?, ?)",
+      const result = await insert(
+        `INSERT INTO "Users" ("Name", "Email", "PasswordHash", "CreatedOn", "UpdatedOn")
+         VALUES (?, ?, ?, ?, ?)`,
         [name, email, passwordHash, now, now]
       );
 
       // Messages scheduled before accounts existed have no owner; hand them to
       // the first account so upgrading does not hide existing data.
       if (isFirstAccount) {
-        const adopted = await run("UPDATE ScheduledMessages SET UserId = ? WHERE UserId IS NULL", [result.id]);
+        const adopted = await run(
+          `UPDATE "ScheduledMessages" SET "UserId" = ? WHERE "UserId" IS NULL`,
+          [result.id]
+        );
         if (adopted.changes) {
           console.log(`Assigned ${adopted.changes} pre-existing scheduled message(s) to the first account`);
         }
       }
 
-      const user = await get("SELECT Id, Name, Email, CreatedOn FROM Users WHERE Id = ?", [result.id]);
+      const user = await get(
+        `SELECT "Id", "Name", "Email", "CreatedOn" FROM "Users" WHERE "Id" = ?`,
+        [result.id]
+      );
       return created(res, "Account created successfully", { token: issueToken(user), user: publicUser(user) });
     } catch (err) {
       return next(err);
@@ -106,7 +113,7 @@ router.post(
   [validateEmail, body("password").notEmpty().withMessage("Password is required"), handleValidation],
   async (req, res, next) => {
     try {
-      const user = await get("SELECT * FROM Users WHERE Email = ?", [req.body.email]);
+      const user = await get(`SELECT * FROM "Users" WHERE "Email" = ?`, [req.body.email]);
 
       const matches = await bcrypt.compare(req.body.password, user?.PasswordHash || decoyHash);
       if (!user || !matches) return error(res, 401, "Invalid email or password");
@@ -126,9 +133,9 @@ router.get("/me", requireAuth, (req, res) =>
 // GET /api/auth/config - lets the sign-in screen hide the sign-up link
 router.get("/config", async (req, res, next) => {
   try {
-    const userCount = await get("SELECT COUNT(*) AS count FROM Users");
+    const userCount = await get(`SELECT COUNT(*) AS "Count" FROM "Users"`);
     return success(res, "Auth configuration retrieved", {
-      registrationOpen: allowRegistration || userCount.count === 0,
+      registrationOpen: allowRegistration || Number(userCount.Count) === 0,
     });
   } catch (err) {
     return next(err);

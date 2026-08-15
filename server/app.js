@@ -6,29 +6,30 @@ const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
 const fs = require("fs");
 const path = require("path");
-const { initialize } = require("./database/db");
+
+const runtime = require("./config/runtime");
+const { initialize } = require("./database");
 const authRoutes = require("./routes/authRoutes");
 const messageRoutes = require("./routes/messageRoutes");
 const whatsappRoutes = require("./routes/whatsappRoutes");
+const cronRoutes = require("./routes/cronRoutes");
 const requestLogger = require("./middleware/requestLogger");
 const { notFound, errorHandler } = require("./middleware/errorHandler");
-const whatsappService = require("./services/whatsappService");
-const startScheduler = require("./scheduler/scheduler");
 
 const app = express();
 app.disable("etag");
 app.disable("x-powered-by");
 
-const port = Number(process.env.PORT || 3000);
 const clientDist = path.join(__dirname, "..", "client", "dist");
 const servesClient = fs.existsSync(clientDist);
 
 // Needed for correct client IPs (and therefore rate limiting) behind a proxy.
 // Express reads a string as a list of trusted IPs, so a hop count like "1" has
 // to be converted to a number or it would be parsed as an address.
-if (process.env.TRUST_PROXY) {
-  const hops = Number(process.env.TRUST_PROXY);
-  app.set("trust proxy", Number.isFinite(hops) ? hops : process.env.TRUST_PROXY);
+const trustProxy = process.env.TRUST_PROXY || (runtime.isServerless ? "1" : "");
+if (trustProxy) {
+  const hops = Number(trustProxy);
+  app.set("trust proxy", Number.isFinite(hops) ? hops : trustProxy);
 }
 
 app.use(
@@ -68,7 +69,11 @@ app.use(express.json({ limit: "50kb" }));
 app.use(requestLogger);
 
 app.get("/api/health", (req, res) =>
-  res.json({ success: true, message: "SendToWP API is running", data: {} })
+  res.json({
+    success: true,
+    message: "SendToWP API is running",
+    data: { mode: runtime.mode, dialect: runtime.dialect, authStore: runtime.authStore },
+  })
 );
 
 app.use(
@@ -85,6 +90,7 @@ app.use(
 app.use("/api/auth", authRoutes);
 app.use("/api/messages", messageRoutes);
 app.use("/api/whatsapp", whatsappRoutes);
+app.use("/api/cron", cronRoutes);
 app.use("/api", notFound);
 
 if (servesClient) {
@@ -112,18 +118,12 @@ if (servesClient) {
 
 app.use(errorHandler);
 
-const start = async () => {
-  await initialize();
-  console.log("Database ready");
-
-  app.listen(port, async () => {
-    console.log(`SendToWP server running on http://localhost:${port}`);
-    await startScheduler();
-    whatsappService.connect().catch((error) => console.error("WhatsApp connect failed:", error.message));
-  });
+// Run the schema exactly once per process, and let every entry point await the
+// same promise so no request is served against an uninitialised database.
+let readyPromise = null;
+const ready = () => {
+  if (!readyPromise) readyPromise = initialize();
+  return readyPromise;
 };
 
-start().catch((error) => {
-  console.error("Failed to start SendToWP:", error.message);
-  process.exit(1);
-});
+module.exports = { app, ready, runtime, servesClient };

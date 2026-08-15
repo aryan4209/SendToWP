@@ -7,20 +7,16 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-and-test:
-    name: Build and smoke test
+  build:
+    name: Build and unit tests
     runs-on: ubuntu-latest
     timeout-minutes: 15
-
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
 
-      # `npm ci` is skipped on purpose: package-lock.json is currently out of
-      # sync with package.json. The refreshed lockfile is uploaded below.
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
@@ -40,129 +36,19 @@ jobs:
       - name: Syntax check every server file
         run: |
           set -euo pipefail
-          find server -name '*.js' -not -path '*/node_modules/*' -print0 \
+          find server api -name '*.js' -not -path '*/node_modules/*' -print0 \
             | xargs -0 -n1 node --check
           echo "server syntax OK"
 
-      - name: Smoke test the API
-        env:
-          NODE_ENV: production
-          PORT: "3000"
-          JWT_SECRET: ci-only-secret-long-enough-to-pass-the-32-char-check
-          DB_PATH: /tmp/ci-sendtowp.db
-          WHATSAPP_AUTH_PATH: /tmp/ci-whatsapp-auth
-          BCRYPT_ROUNDS: "4"
-        run: |
-          set -euo pipefail
+      - name: WhatsApp auth store round-trip
+        run: npm run test:authstore
 
-          BASE=http://127.0.0.1:3000
-          node server/app.js >/tmp/server.log 2>&1 &
-          SERVER_PID=$!
-          trap 'kill $SERVER_PID 2>/dev/null || true' EXIT
-
-          echo "--- waiting for the server to listen ---"
-          for _ in $(seq 1 40); do
-            if curl -fsS "$BASE/api/health" >/dev/null 2>&1; then break; fi
-            if ! kill -0 $SERVER_PID 2>/dev/null; then
-              echo "server exited during startup:"; cat /tmp/server.log; exit 1
-            fi
-            sleep 1
-          done
-
-          curl -fsS "$BASE/api/health" >/dev/null || { cat /tmp/server.log; exit 1; }
-          echo "PASS  health endpoint"
-
-          echo "--- database initialised before serving ---"
-          test -f /tmp/ci-sendtowp.db
-          echo "PASS  sqlite database created"
-
-          echo "--- registration ---"
-          REGISTER=$(curl -fsS -X POST "$BASE/api/auth/register" \
-            -H 'Content-Type: application/json' \
-            -d '{"name":"CI User","email":"ci@example.com","password":"correct-horse-battery"}')
-          TOKEN=$(printf '%s' "$REGISTER" | node -pe 'JSON.parse(require("fs").readFileSync(0,"utf8")).data.token')
-          test -n "$TOKEN"
-          echo "PASS  register returns a token"
-
-          echo "--- duplicate email is rejected ---"
-          CODE=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/api/auth/register" \
-            -H 'Content-Type: application/json' \
-            -d '{"name":"CI User","email":"ci@example.com","password":"correct-horse-battery"}')
-          test "$CODE" = "409" || { echo "expected 409, got $CODE"; exit 1; }
-          echo "PASS  duplicate email rejected"
-
-          echo "--- short password is rejected ---"
-          CODE=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/api/auth/register" \
-            -H 'Content-Type: application/json' \
-            -d '{"name":"CI User","email":"other@example.com","password":"short"}')
-          test "$CODE" = "400" || { echo "expected 400, got $CODE"; exit 1; }
-          echo "PASS  weak password rejected"
-
-          echo "--- protected route without a token ---"
-          CODE=$(curl -s -o /dev/null -w '%{http_code}' "$BASE/api/messages/stats")
-          test "$CODE" = "401" || { echo "expected 401, got $CODE"; exit 1; }
-          echo "PASS  protected route requires auth"
-
-          echo "--- protected route with a token ---"
-          curl -fsS -H "Authorization: Bearer $TOKEN" "$BASE/api/messages/stats" >/dev/null
-          echo "PASS  authorized read"
-
-          echo "--- whatsapp status route is protected ---"
-          CODE=$(curl -s -o /dev/null -w '%{http_code}' "$BASE/api/whatsapp/qr")
-          test "$CODE" = "401" || { echo "expected 401, got $CODE"; exit 1; }
-          echo "PASS  pairing QR requires auth"
-
-          echo "--- login with the right password ---"
-          curl -fsS -X POST "$BASE/api/auth/login" \
-            -H 'Content-Type: application/json' \
-            -d '{"email":"ci@example.com","password":"correct-horse-battery"}' >/dev/null
-          echo "PASS  login"
-
-          echo "--- login with the wrong password ---"
-          CODE=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/api/auth/login" \
-            -H 'Content-Type: application/json' \
-            -d '{"email":"ci@example.com","password":"wrong-password"}')
-          test "$CODE" = "401" || { echo "expected 401, got $CODE"; exit 1; }
-          echo "PASS  wrong password rejected"
-
-          echo "--- schedule a message ---"
-          FUTURE=$(node -pe 'new Date(Date.now()+3600000).toISOString()')
-          curl -fsS -X POST "$BASE/api/messages/schedule" \
-            -H 'Content-Type: application/json' \
-            -H "Authorization: Bearer $TOKEN" \
-            -d "{\"phone\":\"919999999999\",\"message\":\"ci test\",\"scheduleTime\":\"$FUTURE\",\"repeatType\":\"None\"}" >/dev/null
-          echo "PASS  schedule a message"
-
-          echo "--- the scheduled message is listed and owned ---"
-          COUNT=$(curl -fsS -H "Authorization: Bearer $TOKEN" "$BASE/api/messages/scheduled" \
-            | node -pe 'JSON.parse(require("fs").readFileSync(0,"utf8")).data.length')
-          test "$COUNT" = "1" || { echo "expected 1 message, got $COUNT"; exit 1; }
-          echo "PASS  message list scoped to the account"
-
-          echo "--- scheduling in the past is rejected ---"
-          PAST=$(node -pe 'new Date(Date.now()-3600000).toISOString()')
-          CODE=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/api/messages/schedule" \
-            -H 'Content-Type: application/json' \
-            -H "Authorization: Bearer $TOKEN" \
-            -d "{\"phone\":\"919999999999\",\"message\":\"nope\",\"scheduleTime\":\"$PAST\",\"repeatType\":\"None\"}")
-          test "$CODE" = "400" || { echo "expected 400, got $CODE"; exit 1; }
-          echo "PASS  past schedule time rejected"
-
-          echo "--- the SPA is served ---"
-          curl -fsS "$BASE/" | grep -q '<div id="root">'
-          echo "PASS  client shell served"
-
-          echo "--- unknown API route 404s as JSON ---"
-          CODE=$(curl -s -o /dev/null -w '%{http_code}' "$BASE/api/does-not-exist")
-          test "$CODE" = "404" || { echo "expected 404, got $CODE"; exit 1; }
-          echo "PASS  unknown api route"
-
-          echo ""
-          echo "All smoke tests passed."
-
-      - name: Server log
-        if: always()
-        run: cat /tmp/server.log || true
+      - name: Upload built client
+        uses: actions/upload-artifact@v4
+        with:
+          name: client-dist
+          path: client/dist
+          retention-days: 1
 
       # Download this, commit it, and `npm ci` works again everywhere.
       - name: Upload refreshed package-lock.json
@@ -172,6 +58,62 @@ jobs:
           name: package-lock
           path: package-lock.json
           if-no-files-found: warn
+
+  api:
+    name: API tests (${{ matrix.backend }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        backend: [sqlite, postgres]
+
+    # Only started for the postgres leg; the sqlite leg ignores it.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: sendtowp
+          POSTGRES_PASSWORD: sendtowp
+          POSTGRES_DB: sendtowp
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: client-dist
+          path: client/dist
+
+      - name: Run the API suite
+        env:
+          # The postgres leg exercises the pg driver, the `?`->`$n` rewriting,
+          # SERIAL ids via RETURNING, and quoted PascalCase identifiers.
+          DATABASE_URL: ${{ matrix.backend == 'postgres' && 'postgres://sendtowp:sendtowp@127.0.0.1:5432/sendtowp' || '' }}
+          PGSSL: disable
+          DB_PATH: /tmp/ci-${{ matrix.backend }}.db
+          WHATSAPP_AUTH_PATH: /tmp/ci-wa-${{ matrix.backend }}
+        run: npm run test:api
+
+      - name: Auth store round-trip on this backend
+        env:
+          DATABASE_URL: ${{ matrix.backend == 'postgres' && 'postgres://sendtowp:sendtowp@127.0.0.1:5432/sendtowp' || '' }}
+          PGSSL: disable
+        run: npm run test:authstore
 
   docker:
     name: Docker image builds
