@@ -1,11 +1,7 @@
 const QRCode = require("qrcode");
 const pino = require("pino");
-const {
-  default: makeWASocket,
-  DisconnectReason,
-  fetchLatestBaileysVersion,
-} = require("@whiskeysockets/baileys");
 
+const { loadBaileys } = require("./baileys");
 const runtime = require("../config/runtime");
 const authStore = require("./authStore");
 
@@ -39,6 +35,8 @@ const createConnection = async () => {
   setStatus("Connecting");
   latestQr = null;
   lastError = null;
+
+  const { default: makeWASocket, DisconnectReason, fetchLatestBaileysVersion } = await loadBaileys();
 
   const { state, saveCreds } = await authStore.loadAuthState();
   const { version } = await fetchLatestBaileysVersion();

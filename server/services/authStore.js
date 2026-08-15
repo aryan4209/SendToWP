@@ -1,12 +1,7 @@
 const path = require("path");
 const fs = require("fs");
-const {
-  initAuthCreds,
-  BufferJSON,
-  proto,
-  useMultiFileAuthState,
-} = require("@whiskeysockets/baileys");
 
+const { loadBaileys } = require("./baileys");
 const { run, get } = require("../database");
 const runtime = require("../config/runtime");
 
@@ -16,17 +11,20 @@ const authDirectory = process.env.WHATSAPP_AUTH_PATH
 
 // ---------------------------------------------------------------- database ---
 
-const writeRow = (key, value) =>
-  run(
+const writeRow = async (key, value) => {
+  const { BufferJSON } = await loadBaileys();
+  return run(
     `INSERT INTO "WhatsAppAuth" ("Key", "Value", "UpdatedOn") VALUES (?, ?, ?)
      ON CONFLICT ("Key") DO UPDATE SET "Value" = excluded."Value", "UpdatedOn" = excluded."UpdatedOn"`,
     [key, JSON.stringify(value, BufferJSON.replacer), new Date().toISOString()]
   );
+};
 
 const readRow = async (key) => {
   const row = await get(`SELECT "Value" FROM "WhatsAppAuth" WHERE "Key" = ?`, [key]);
   if (!row) return null;
   try {
+    const { BufferJSON } = await loadBaileys();
     return JSON.parse(row.Value, BufferJSON.reviver);
   } catch (error) {
     console.error(`Corrupt WhatsApp auth row "${key}":`, error.message);
@@ -45,6 +43,7 @@ const deleteRow = (key) => run(`DELETE FROM "WhatsAppAuth" WHERE "Key" = ?`, [ke
  * Uint8Arrays survive the round trip.
  */
 const useDatabaseAuthState = async () => {
+  const { initAuthCreds, proto } = await loadBaileys();
   const creds = (await readRow("creds")) || initAuthCreds();
 
   return {
@@ -100,6 +99,7 @@ const usingDatabase = runtime.authStore === "database";
 const loadAuthState = async () => {
   if (usingDatabase) return useDatabaseAuthState();
   removeCorruptCredentials();
+  const { useMultiFileAuthState } = await loadBaileys();
   return useMultiFileAuthState(authDirectory);
 };
 
