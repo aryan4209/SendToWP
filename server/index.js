@@ -7,6 +7,7 @@
  */
 const { app, ready, runtime } = require("./app");
 const whatsappService = require("./services/whatsappService");
+const heartbeatService = require("./services/heartbeatService");
 const startScheduler = require("./scheduler/scheduler");
 
 const port = Number(process.env.PORT || 3000);
@@ -19,6 +20,7 @@ const start = async () => {
     console.log(`Mode: ${runtime.mode} | storage: ${runtime.dialect} | session: ${runtime.authStore}`);
 
     await startScheduler();
+    heartbeatService.start();
     whatsappService
       .connect()
       .catch((error) => console.error("WhatsApp connect failed:", error.message));
@@ -26,6 +28,7 @@ const start = async () => {
 
   const shutdown = (signal) => {
     console.log(`${signal} received, shutting down`);
+    heartbeatService.stop();
     server.close(() => {
       whatsappService.disconnect().finally(() => process.exit(0));
     });

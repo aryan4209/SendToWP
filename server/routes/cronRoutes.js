@@ -3,6 +3,7 @@ const crypto = require("crypto");
 const runtime = require("../config/runtime");
 const { processDueMessages, recoverInterruptedMessages } = require("../services/schedulerService");
 const whatsappService = require("../services/whatsappService");
+const heartbeatService = require("../services/heartbeatService");
 const { success, error } = require("../utils/apiResponse");
 
 const router = express.Router();
@@ -36,14 +37,18 @@ router.all("/run", async (req, res, next) => {
   }
 
   try {
+    // On serverless there is no long-lived heartbeat, so the cron run is also
+    // what keeps the database counted as active and applies retention.
+    await heartbeatService.touch(0);
     await recoverInterruptedMessages();
     const result = await processDueMessages();
+    const retention = await heartbeatService.purgeIfDue();
 
     // A serverless invocation must not leave the socket dangling, or the next
     // one inherits a half-open connection.
     if (!runtime.isPersistent) await whatsappService.disconnect();
 
-    return success(res, "Scheduler run complete", result);
+    return success(res, "Scheduler run complete", { ...result, retention });
   } catch (err) {
     if (!runtime.isPersistent) await whatsappService.disconnect().catch(() => {});
     return next(err);

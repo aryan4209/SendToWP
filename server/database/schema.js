@@ -39,6 +39,13 @@ const tables = {
       "Value" TEXT NOT NULL,
       "UpdatedOn" TEXT NOT NULL
     )`,
+    // Heartbeat and last-run bookkeeping. Writing here is also what keeps a
+    // free-tier database from being judged inactive.
+    `CREATE TABLE IF NOT EXISTS "SystemState" (
+      "Key" TEXT PRIMARY KEY,
+      "Value" TEXT,
+      "UpdatedOn" TEXT NOT NULL
+    )`,
   ],
   postgres: [
     `CREATE TABLE IF NOT EXISTS "Users" (
@@ -66,6 +73,13 @@ const tables = {
     `CREATE TABLE IF NOT EXISTS "WhatsAppAuth" (
       "Key" TEXT PRIMARY KEY,
       "Value" TEXT NOT NULL,
+      "UpdatedOn" TEXT NOT NULL
+    )`,
+    // Heartbeat and last-run bookkeeping. Writing here is also what keeps a
+    // free-tier database from being judged inactive.
+    `CREATE TABLE IF NOT EXISTS "SystemState" (
+      "Key" TEXT PRIMARY KEY,
+      "Value" TEXT,
       "UpdatedOn" TEXT NOT NULL
     )`,
   ],

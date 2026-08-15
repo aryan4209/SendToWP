@@ -10,8 +10,9 @@
     "dev": "concurrently -n server,client -c green,cyan \"npm run dev -w server\" \"npm run dev -w client\"",
     "build": "npm run build -w client",
     "start": "npm start -w server",
-    "test": "npm run test:authstore && npm run test:api",
+    "test": "npm run test:authstore && npm run test:retention && npm run test:api",
     "test:authstore": "node server/tests/authStore.test.js",
+    "test:retention": "node server/tests/retention.test.js",
     "test:api": "bash scripts/smoke-test.sh"
   },
   "devDependencies": {

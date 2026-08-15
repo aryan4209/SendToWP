@@ -43,6 +43,9 @@ jobs:
       - name: WhatsApp auth store round-trip
         run: npm run test:authstore
 
+      - name: Retention purge boundaries
+        run: npm run test:retention
+
       - name: Upload built client
         uses: actions/upload-artifact@v4
         with:
@@ -109,11 +112,13 @@ jobs:
           WHATSAPP_AUTH_PATH: /tmp/ci-wa-${{ matrix.backend }}
         run: npm run test:api
 
-      - name: Auth store round-trip on this backend
+      - name: Unit suites on this backend
         env:
           DATABASE_URL: ${{ matrix.backend == 'postgres' && 'postgres://sendtowp:sendtowp@127.0.0.1:5432/sendtowp' || '' }}
           PGSSL: disable
-        run: npm run test:authstore
+        run: |
+          npm run test:authstore
+          npm run test:retention
 
   docker:
     name: Docker image builds

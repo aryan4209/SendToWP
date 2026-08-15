@@ -13,6 +13,7 @@ const authRoutes = require("./routes/authRoutes");
 const messageRoutes = require("./routes/messageRoutes");
 const whatsappRoutes = require("./routes/whatsappRoutes");
 const cronRoutes = require("./routes/cronRoutes");
+const keepaliveRoutes = require("./routes/keepaliveRoutes");
 const requestLogger = require("./middleware/requestLogger");
 const { notFound, errorHandler } = require("./middleware/errorHandler");
 
@@ -91,6 +92,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/messages", messageRoutes);
 app.use("/api/whatsapp", whatsappRoutes);
 app.use("/api/cron", cronRoutes);
+app.use("/api/keepalive", keepaliveRoutes);
 app.use("/api", notFound);
 
 if (servesClient) {

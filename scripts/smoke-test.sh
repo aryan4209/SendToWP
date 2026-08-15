@@ -150,6 +150,21 @@ check "cron with a wrong secret is 401" 401 \
 check "cron with the right secret runs" 200 \
   "$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/api/cron/run" -H "Authorization: Bearer $CRON_SECRET")"
 
+echo "== keepalive =="
+KEEP1=$(body GET /api/keepalive)
+check "keepalive returns 200" 200 "$(code GET /api/keepalive)"
+check "reports alive" "true" \
+  "$(printf '%s' "$KEEP1" | node -pe 'String(JSON.parse(require("fs").readFileSync(0,"utf8")).data.alive)')"
+check "records a heartbeat timestamp" "string" \
+  "$(printf '%s' "$KEEP1" | node -pe 'typeof JSON.parse(require("fs").readFileSync(0,"utf8")).data.lastHeartbeat')"
+# The first call above already wrote, so an immediate second call must be
+# throttled - otherwise a public endpoint could be used to hammer the database.
+check "second call is write-throttled" "false" \
+  "$(body GET /api/keepalive | node -pe 'String(JSON.parse(require("fs").readFileSync(0,"utf8")).data.wroteHeartbeat)')"
+check "state endpoint returns 200" 200 "$(code GET /api/keepalive/state)"
+check "state includes the heartbeat key" "string" \
+  "$(body GET /api/keepalive/state | node -pe 'typeof JSON.parse(require("fs").readFileSync(0,"utf8")).data.heartbeat')"
+
 echo "== static client =="
 if [ -f client/dist/index.html ]; then
   check "SPA shell served" 200 "$(code GET /)"
