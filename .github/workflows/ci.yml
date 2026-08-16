@@ -41,9 +41,13 @@ jobs:
           echo "server syntax OK"
 
       - name: WhatsApp auth store round-trip
+        env:
+          ALLOW_DESTRUCTIVE_TEST: "1"
         run: npm run test:authstore
 
       - name: Retention purge boundaries
+        env:
+          ALLOW_DESTRUCTIVE_TEST: "1"
         run: npm run test:retention
 
       - name: Upload built client
@@ -116,6 +120,10 @@ jobs:
         env:
           DATABASE_URL: ${{ matrix.backend == 'postgres' && 'postgres://sendtowp:sendtowp@127.0.0.1:5432/sendtowp' || '' }}
           PGSSL: disable
+          # These suites wipe their tables and refuse to run against a database
+          # holding real data. The API suite above has just populated this one,
+          # but it is a throwaway service container, so opt in explicitly.
+          ALLOW_DESTRUCTIVE_TEST: "1"
         run: |
           npm run test:authstore
           npm run test:retention
