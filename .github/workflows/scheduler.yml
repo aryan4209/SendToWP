@@ -1,0 +1,96 @@
+name: Send due messages
+
+# Drives the scheduler for deployments that cannot run their own cron.
+#
+# Vercel's Hobby plan only permits ONE cron run per day, which is useless for a
+# minute-level scheduler. This workflow calls the same endpoint from GitHub's
+# infrastructure instead, so due messages go out without anyone pressing
+# anything. The request also writes a heartbeat, so it doubles as the keepalive
+# that stops a free database being judged inactive.
+#
+# ---------------------------------------------------------------------------
+# SETUP (one time):
+#   1. Repository -> Settings -> Secrets and variables -> Actions
+#   2. "Secrets" tab -> New repository secret
+#        Name:  CRON_SECRET
+#        Value: the same CRON_SECRET set in your hosting environment
+#   3. Optionally add a "Variables" entry DEPLOY_URL if your URL differs
+#      from the default below.
+#
+# Without CRON_SECRET the job exits quietly, so forks are unaffected.
+# ---------------------------------------------------------------------------
+#
+# ACCURACY: GitHub's minimum interval is 5 minutes and runs are frequently
+# delayed 5-15 minutes under load, so a message can be late by that much. For
+# delivery within a minute, point a dedicated cron service (cron-job.org is
+# free and supports 1-minute intervals) at:
+#
+#     POST https://<your-app>/api/cron/run?secret=<CRON_SECRET>
+#
+# or run the app on a host that keeps a process alive, where the built-in
+# node-cron fires every minute and no external trigger is needed at all.
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: send-due-messages
+  cancel-in-progress: false
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Trigger the scheduler
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          DEPLOY_URL: ${{ vars.DEPLOY_URL || 'https://send-to-wp-client.vercel.app' }}
+        run: |
+          set -uo pipefail
+
+          if [ -z "${CRON_SECRET:-}" ]; then
+            echo "CRON_SECRET is not configured - skipping. See this file's header."
+            exit 0
+          fi
+
+          URL="${DEPLOY_URL%/}/api/cron/run"
+          echo "POST $URL"
+
+          # A cold serverless start plus a WhatsApp handshake can take ~40s, and
+          # the whole run must still finish well inside the platform's limit.
+          for attempt in 1 2 3; do
+            CODE=$(curl -s -o /tmp/out.json -w '%{http_code}' --max-time 180 \
+              -X POST "$URL" -H "Authorization: Bearer $CRON_SECRET" || echo 000)
+
+            if [ "$CODE" = "200" ]; then
+              echo "OK"
+              cat /tmp/out.json
+              echo ""
+              # Surface what actually happened in the run summary.
+              node -e '
+                const fs = require("fs");
+                try {
+                  const d = JSON.parse(fs.readFileSync("/tmp/out.json", "utf8")).data || {};
+                  const results = d.results || [];
+                  const sent = results.filter(r => r.outcome === "sent").length;
+                  const failed = results.filter(r => r.outcome === "failed");
+                  console.log(`due=${d.due ?? 0} sent=${sent} failed=${failed.length}`);
+                  failed.forEach(f => console.log(`  message ${f.id}: ${f.error}`));
+                } catch (e) { console.log("could not parse response"); }
+              '
+              exit 0
+            fi
+
+            echo "attempt $attempt returned $CODE"
+            [ -s /tmp/out.json ] && cat /tmp/out.json && echo ""
+            sleep 15
+          done
+
+          echo "Scheduler trigger failed after 3 attempts."
+          exit 1
